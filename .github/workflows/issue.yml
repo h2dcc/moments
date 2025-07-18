@@ -11,7 +11,6 @@ jobs:
       - name: Check if the comment is on the target issue
         id: check-issue
         run: |
-          # 确保只对 issues/1 的评论触发
           if [ "${{ github.event.issue.number }}" != "1" ]; then
             echo "::set-output name=should_trigger::false"
           else
@@ -21,20 +20,29 @@ jobs:
       - name: Trigger empty commit in lawtee.github.io
         if: steps.check-issue.outputs.should_trigger == 'true'
         uses: actions/github-script@v6
+        env:
+          # 使用 PAT 替代默认的 GITHUB_TOKEN
+          GH_TOKEN: ${{ secrets.PAT }}
         with:
           script: |
             const { execSync } = require('child_process');
             const repo = 'h2dcc/lawtee.github.io';
-            const token = process.env.GITHUB_TOKEN;
+            const token = process.env.GH_TOKEN;
 
-            // 克隆目标仓库
-            execSync(`git clone https://github.com/${repo}.git`);
-            process.chdir('lawtee.github.io');
+            try {
+              // 使用 PAT 克隆私有仓库
+              execSync(`git clone https://${token}@github.com/${repo}.git`);
+              process.chdir('lawtee.github.io');
+              
+              // 设置 Git 身份
+              execSync('git config user.name "github-actions[bot]"');
+              execSync('git config user.email "41898282+github-actions[bot]@users.noreply.github.com"');
 
-            // 设置 Git 身份
-            execSync('git config user.name "github-actions[bot]"');
-            execSync('git config user.email "41898282+github-actions[bot]@users.noreply.github.com"');
-
-            // 创建一个空提交并推送
-            execSync('git commit --allow-empty -m "Trigger update from moments/issues/1"');
-            execSync(`git push https://${token}@github.com/${repo}.git master`);
+              // 创建空提交并推送
+              execSync('git commit --allow-empty -m "Trigger update from moments/issues/1"');
+              execSync(`git push https://${token}@github.com/${repo}.git master`);
+              console.log('✅ Empty commit pushed successfully!');
+            } catch (error) {
+              console.error('❌ Error:', error.message);
+              process.exit(1);
+            }
