@@ -9,17 +9,20 @@ jobs:
   trigger-empty-commit:
     runs-on: ubuntu-latest
     steps:
-      - name: Check if manual trigger or target issue
+      - name: Check trigger type and prepare commit message
         id: check-trigger
         run: |
-          # 如果是手动触发
+          # 处理手动触发
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo "should_trigger=true" >> $GITHUB_OUTPUT
-          # 如果是 issue_comment 事件且针对 issue #1
-          elif [ "${{ github.event.issue.number }}" == "1" ]; then
+            echo "commit_msg='[Manual] Trigger update from moments/issues/1'" >> $GITHUB_OUTPUT
+          # 处理issue评论事件
+          elif [ "${{ github.event.issue.number }}" -eq 1 ]; then
             echo "should_trigger=true" >> $GITHUB_OUTPUT
+            echo "commit_msg='Trigger update from moments/issues/1'" >> $GITHUB_OUTPUT
           else
             echo "should_trigger=false" >> $GITHUB_OUTPUT
+            echo "commit_msg=''" >> $GITHUB_OUTPUT
           fi
 
       - name: Trigger empty commit in lawtee.github.io
@@ -32,22 +35,21 @@ jobs:
             const { execSync } = require('child_process');
             const repo = 'h2dcc/lawtee.github.io';
             const token = process.env.PAT;
+            
+            // 从步骤输出获取提交信息
+            const commitMsg = `${{ steps.check-trigger.outputs.commit_msg }}`;
 
             try {
               const repoUrl = `https://x-access-token:${token}@github.com/${repo}.git`;
-              execSync(`git clone ${repoUrl}`);
+              execSync(`git clone ${repoUrl}`, { stdio: 'inherit' });
               process.chdir('lawtee.github.io');
 
-              execSync('git config user.name "github-actions[bot]"');
-              execSync('git config user.email "41898282+github-actions[bot]@users.noreply.github.com"');
+              execSync('git config user.name "github-actions[bot]"', { stdio: 'inherit' });
+              execSync('git config user.email "41898282+github-actions[bot]@users.noreply.github.com"', { stdio: 'inherit' });
 
-              // 添加手动触发的标识
-              const commitMsg = "${{ github.event_name == 'workflow_dispatch' ? 
-                '[Manual] Trigger update from moments/issues/1' : 
-                'Trigger update from moments/issues/1' }}";
-              
-              execSync(`git commit --allow-empty -m "${commitMsg}"`);
-              execSync(`git push ${repoUrl} master`);
+              // 安全执行空提交
+              execSync(`git commit --allow-empty -m "${commitMsg.replace(/"/g, '\\"')}"`, { stdio: 'inherit' });
+              execSync(`git push ${repoUrl} master`, { stdio: 'inherit' });
               console.log('✅ Empty commit pushed successfully!');
             } catch (error) {
               console.error('❌ Error:', error.message);
